@@ -19,6 +19,9 @@ let _data = {
   }
 };
 
+// 当前选中的项目ID
+let currentProjectId = null;
+
 // ==================== 工具函数 ====================
 function formatMoney(n) {
   if (n == null) return '¥0.00';
@@ -92,6 +95,9 @@ async function loadAllData() {
         // 审批流程数据
         if (cloud.approvals) _data.approvals = cloud.approvals;
         if (cloud.approvalFlows) _data.approvalFlows = cloud.approvalFlows;
+        // 项目管理数据
+        if (cloud.projects) _data.projects = cloud.projects;
+        if (cloud.projectTeams) _data.projectTeams = cloud.projectTeams;
       }
     } catch (e) {
       clearTimeout(timeoutId);
@@ -118,8 +124,12 @@ function initDefaultUsers() {
     ];
     saveAll();
   }
-  // 初始化审批流程模板
+// 初始化审批流程模板
   initDefaultApprovalFlows();
+  // 初始化默认项目
+  initDefaultProjects();
+  // 加载保存的项目ID
+  loadSavedProjectId();
 }
 
 async function saveAll() {
@@ -142,7 +152,9 @@ async function saveAll() {
       users: _data.users || [],
       projectSettings: _data.projectSettings || {},
       approvals: _data.approvals || [],
-      approvalFlows: _data.approvalFlows || []
+      approvalFlows: _data.approvalFlows || [],
+      projects: _data.projects || [],
+      projectTeams: _data.projectTeams || []
     };
 
     const { error } = await window.supabase
@@ -188,7 +200,7 @@ const db2 = {
 
 // ==================== 权限配置 ====================
 const PERMISSIONS = {
-  manager:  { label: '项目经理', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', icon: '👔', modules: ['dashboard','material','labor','finance','users','settings','approval'] },
+  manager:  { label: '项目经理', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', icon: '👔', modules: ['dashboard','material','labor','finance','users','settings','approval','projects','projectTeams'] },
   material: { label: '材料员',   color: '#3b82f6', bg: 'rgba(59,130,246,0.15)', icon: '📦', modules: ['dashboard','material','approval'] },
   foreman:  { label: '班组长',   color: '#10b981', bg: 'rgba(16,185,129,0.15)', icon: '👷', modules: ['dashboard','labor','approval'] },
 };
@@ -332,6 +344,8 @@ function showSection(sectionId) {
     case 'report':           renderReport(); break;
     case 'users':            renderUsers(); break;
     case 'settings':         renderSettings(); break;
+    case 'projects':         renderProjects(); break;
+    case 'projectTeams':     renderProjectTeams(); break;
   }
 }
 
@@ -362,6 +376,8 @@ function renderSidebar() {
       { id:'report',    icon:'📋', label:'报表中心' },
     ]},
     { id:'users',    icon:'🔐', label:'用户管理', module:'users' },
+    { id:'projects', icon:'📁', label:'项目管理', module:'projects' },
+    { id:'projectTeams', icon:'👥', label:'项目团队', module:'projectTeams' },
     { id:'settings', icon:'⚙️', label:'系统设置', module:'settings' },
   ];
 
@@ -1670,5 +1686,381 @@ document.addEventListener('DOMContentLoaded', async function() {
   $1('modalOverlay').onclick = function(e) { if(e.target===this) closeModal(); };
   document.addEventListener('keydown', function(e) { if(e.key==='Escape') closeModal(); });
   
-  console.log('🎉 初始化完成');
+console.log('🎉 初始化完成');
 });
+
+// ==================== 项目管理 ====================
+
+// 初始化默认项目
+function initDefaultProjects() {
+  if (!_data.projects || _data.projects.length === 0) {
+    _data.projects = [
+      {
+        id: 'proj_1',
+        name: '上海商飞总部二期2号楼中庭幕墙工程',
+        address: '上海市浦东新区',
+        manager: '项目负责人',
+        contractAmount: 0,
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+        status: 'ongoing',
+        createdAt: new Date().toISOString()
+      }
+    ];
+  }
+}
+
+// 渲染项目管理页面
+function renderProjects() {
+  const projects = _data.projects || [];
+  
+  const stats = {
+    total: projects.length,
+    ongoing: projects.filter(p => p.status === 'ongoing').length,
+    completed: projects.filter(p => p.status === 'completed').length
+  };
+  
+  let html = `
+    <div class="section-toolbar">
+      <button class="btn-primary" onclick="openProjectForm()">+ 新建项目</button>
+      <input type="text" class="search-input" placeholder="🔍 搜索项目..." oninput="filterProjects(this.value)">
+    </div>
+    
+    <div class="approval-stats">
+      <div class="approval-stat-card">
+        <div class="stat-icon">📁</div>
+        <div class="stat-num">${stats.total}</div>
+        <div class="stat-label">项目总数</div>
+      </div>
+      <div class="approval-stat-card warning">
+        <div class="stat-icon">🔨</div>
+        <div class="stat-num">${stats.ongoing}</div>
+        <div class="stat-label">进行中</div>
+      </div>
+      <div class="approval-stat-card success">
+        <div class="stat-icon">✅</div>
+        <div class="stat-num">${stats.completed}</div>
+        <div class="stat-label">已完成</div>
+      </div>
+    </div>
+  `;
+  
+  if (projects.length === 0) {
+    html += '<div class="empty-state"><div class="empty-icon">📁</div><div>暂无项目，点击上方按钮创建第一个项目</div></div>';
+  } else {
+    html += '<div class="project-list">';
+    projects.forEach(p => {
+      const statusClass = p.status === 'ongoing' ? 'badge-blue' : 'badge-green';
+      const statusText = p.status === 'ongoing' ? '进行中' : '已完成';
+      html += `
+        <div class="project-card" data-project-id="${p.id}" onclick="viewProjectDetail('${p.id}')">
+          <div class="project-card-header">
+            <div class="project-card-title">${p.name}</div>
+            <span class="badge ${statusClass}">${statusText}</span>
+          </div>
+          <div class="project-card-info">
+            <div class="info-item">📍 ${p.address || '未设置地址'}</div>
+            <div class="info-item">📅 ${p.startDate || ''} ~ ${p.endDate || ''}</div>
+            <div class="info-item">💰 ${formatMoney(p.contractAmount || 0)}</div>
+          </div>
+          <div class="project-card-actions">
+            <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();openProjectForm('${p.id}')">✏️ 编辑</button>
+            <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();switchProject('${p.id}')">🎯 ${currentProjectId === p.id ? '当前项目' : '设为当前'}</button>
+          </div>
+        </div>
+      `;
+    });
+    html += '</div>';
+  }
+  
+  showSectionContent('projects', html);
+}
+
+function filterProjects(keyword) {
+  const cards = document.querySelectorAll('.project-card');
+  cards.forEach(card => {
+    const name = card.querySelector('.project-card-title').textContent.toLowerCase();
+    card.style.display = name.includes(keyword.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function openProjectForm(editId) {
+  const project = editId ? (_data.projects || []).find(p => p.id === editId) : null;
+  
+  showModal(project ? '编辑项目' : '新建项目', `
+    <div class="form-grid">
+      <div class="form-group full-width">
+        <label>项目名称 *</label>
+        <input type="text" id="f_proj_name" value="${project?.name || ''}" placeholder="如：上海商飞总部幕墙工程">
+      </div>
+      <div class="form-group full-width">
+        <label>项目地址</label>
+        <input type="text" id="f_proj_address" value="${project?.address || ''}" placeholder="项目所在地址">
+      </div>
+      <div class="form-group">
+        <label>项目经理</label>
+        <input type="text" id="f_proj_manager" value="${project?.manager || ''}" placeholder="项目经理姓名">
+      </div>
+      <div class="form-group">
+        <label>合同金额</label>
+        <input type="number" id="f_proj_amount" value="${project?.contractAmount || ''}" min="0" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label>开工日期</label>
+        <input type="date" id="f_proj_start" value="${project?.startDate || ''}">
+      </div>
+      <div class="form-group">
+        <label>竣工日期</label>
+        <input type="date" id="f_proj_end" value="${project?.endDate || ''}">
+      </div>
+      <div class="form-group full-width">
+        <label>项目状态</label>
+        <select id="f_proj_status">
+          <option value="ongoing" ${project?.status === 'ongoing' || !project ? 'selected' : ''}>进行中</option>
+          <option value="completed" ${project?.status === 'completed' ? 'selected' : ''}>已完成</option>
+        </select>
+      </div>
+      <div class="form-group full-width">
+        <label>备注</label>
+        <textarea id="f_proj_remark" rows="3" placeholder="其他说明...">${project?.remark || ''}</textarea>
+      </div>
+    </div>
+  `, async () => {
+    const name = $1('f_proj_name').value.trim();
+    if (!name) { showToast('请填写项目名称', 'error'); return; }
+    
+    const projectData = {
+      id: project?.id || 'proj_' + Date.now(),
+      name,
+      address: $1('f_proj_address').value.trim(),
+      manager: $1('f_proj_manager').value.trim(),
+      contractAmount: parseFloat($1('f_proj_amount').value) || 0,
+      startDate: $1('f_proj_start').value,
+      endDate: $1('f_proj_end').value,
+      status: $1('f_proj_status').value,
+      remark: $1('f_proj_remark').value.trim(),
+      createdAt: project?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    if (project) {
+      const idx = (_data.projects || []).findIndex(p => p.id === project.id);
+      if (idx >= 0) _data.projects[idx] = projectData;
+    } else {
+      _data.projects = _data.projects || [];
+      _data.projects.push(projectData);
+    }
+    
+    await saveAll();
+    renderProjects();
+    showToast(project ? '项目已更新' : '项目已创建', 'success');
+  });
+}
+
+function viewProjectDetail(projectId) {
+  const project = (_data.projects || []).find(p => p.id === projectId);
+  if (!project) return;
+  
+  const teams = (_data.projectTeams || []).filter(t => t.projectId === projectId);
+  
+  showModal('项目详情', `
+    <div class="approval-detail">
+      <div class="detail-header">
+        <span class="approval-type badge-blue">📁 ${project.name}</span>
+        <span class="approval-status badge-${project.status === 'ongoing' ? 'blue' : 'green'}">
+          ${project.status === 'ongoing' ? '进行中' : '已完成'}
+        </span>
+      </div>
+      <div class="detail-info">
+        <div class="detail-row"><label>项目地址</label><div>${project.address || '-'}</div></div>
+        <div class="detail-row"><label>项目经理</label><div>${project.manager || '-'}</div></div>
+        <div class="detail-row"><label>合同金额</label><div class="money-cell">${formatMoney(project.contractAmount || 0)}</div></div>
+        <div class="detail-row"><label>工期</label><div>${project.startDate || '-'} ~ ${project.endDate || '-'}</div></div>
+        <div class="detail-row"><label>团队成员</label><div>${teams.length} 人</div></div>
+        <div class="detail-row full"><label>备注</label><div>${project.remark || '无'}</div></div>
+      </div>
+    </div>
+  `, () => closeModal());
+}
+
+async function switchProject(projectId) {
+  currentProjectId = projectId;
+  sessionStorage.setItem('cwm_project_id', projectId);
+  const project = (_data.projects || []).find(p => p.id === projectId);
+  if (project) {
+    _data.projectSettings = {
+      ..._data.projectSettings,
+      name: project.name,
+      address: project.address,
+      manager: project.manager,
+      startDate: project.startDate,
+      endDate: project.endDate,
+      contractAmount: project.contractAmount
+    };
+  }
+  renderHeader();
+  renderProjects();
+  showToast(`已切换到项目：${project?.name || ''}`, 'success');
+}
+
+// ==================== 项目团队 ====================
+
+function renderProjectTeams() {
+  const teams = _data.projectTeams || [];
+  const projectId = currentProjectId;
+  const filteredTeams = projectId ? teams.filter(t => t.projectId === projectId) : teams;
+  
+  const stats = {
+    total: filteredTeams.length,
+    managers: filteredTeams.filter(t => t.role === 'manager').length,
+    members: filteredTeams.filter(t => t.role !== 'manager').length
+  };
+  
+  const projectOptions = (_data.projects || []).map(p => 
+    `<option value="${p.id}" ${p.id === projectId ? 'selected' : ''}>${p.name}</option>`
+  ).join('');
+  
+  let html = `
+    <div class="section-toolbar">
+      <select class="project-filter" onchange="filterTeamByProject(this.value)">
+        <option value="">全部项目</option>
+        ${projectOptions}
+      </select>
+      <button class="btn-primary" onclick="openTeamMemberForm()">+ 添加成员</button>
+      <input type="text" class="search-input" placeholder="🔍 搜索成员..." oninput="filterTeamMembers(this.value)">
+    </div>
+    
+    <div class="approval-stats">
+      <div class="approval-stat-card">
+        <div class="stat-icon">👥</div>
+        <div class="stat-num">${stats.total}</div>
+        <div class="stat-label">团队成员</div>
+      </div>
+      <div class="approval-stat-card warning">
+        <div class="stat-icon">👔</div>
+        <div class="stat-num">${stats.managers}</div>
+        <div class="stat-label">项目管理人员</div>
+      </div>
+      <div class="approval-stat-card success">
+        <div class="stat-icon">🧑</div>
+        <div class="stat-num">${stats.members}</div>
+        <div class="stat-label">其他成员</div>
+      </div>
+    </div>
+  `;
+  
+  if (filteredTeams.length === 0) {
+    html += '<div class="empty-state"><div class="empty-icon">👥</div><div>暂无团队成员，点击上方按钮添加</div></div>';
+  } else {
+    html += '<div class="table-wrapper"><table class="data-table"><thead><tr><th>姓名</th><th>角色</th><th>所属项目</th><th>联系电话</th><th>邮箱</th><th>操作</th></tr></thead><tbody>';
+    filteredTeams.forEach(t => {
+      const project = (_data.projects || []).find(p => p.id === t.projectId);
+      const roleBadge = t.role === 'manager' ? 'badge-yellow' : t.role === 'member' ? 'badge-blue' : 'badge-gray';
+      const roleText = t.role === 'manager' ? '项目负责人' : t.role === 'member' ? '项目成员' : '其他';
+      html += `<tr><td><strong>${t.name || ''}</strong></td><td><span class="badge ${roleBadge}">${roleText}</span></td><td>${project?.name || '-'}</td><td>${t.phone || '-'}</td><td>${t.email || '-'}</td><td class="action-cell"><button class="btn-icon" onclick="openTeamMemberForm('${t.id}')">✏️</button><button class="btn-icon" onclick="delTeamMember('${t.id}')">🗑️</button></td></tr>`;
+    });
+    html += '</tbody></table></div>';
+  }
+  
+  showSectionContent('projectTeams', html);
+}
+
+function filterTeamByProject(projectId) {
+  currentProjectId = projectId || null;
+  if (projectId) sessionStorage.setItem('cwm_project_id', projectId);
+  renderProjectTeams();
+}
+
+function filterTeamMembers(keyword) {
+  const rows = document.querySelectorAll('#section_projectTeams tbody tr');
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    row.style.display = text.includes(keyword.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function openTeamMemberForm(editId) {
+  const member = editId ? (_data.projectTeams || []).find(t => t.id === editId) : null;
+  const projectOptions = (_data.projects || []).map(p => 
+    `<option value="${p.id}" ${(member?.projectId || currentProjectId) === p.id ? 'selected' : ''}>${p.name}</option>`
+  ).join('');
+  
+  showModal(member ? '编辑团队成员' : '添加团队成员', `
+    <div class="form-grid">
+      <div class="form-group full-width">
+        <label>姓名 *</label>
+        <input type="text" id="f_tm_name" value="${member?.name || ''}" placeholder="成员姓名">
+      </div>
+      <div class="form-group full-width">
+        <label>所属项目 *</label>
+        <select id="f_tm_project">${projectOptions}</select>
+      </div>
+      <div class="form-group">
+        <label>角色</label>
+        <select id="f_tm_role">
+          <option value="manager" ${member?.role === 'manager' ? 'selected' : ''}>项目负责人</option>
+          <option value="member" ${member?.role === 'member' || !member ? 'selected' : ''}>项目成员</option>
+          <option value="other" ${member?.role === 'other' ? 'selected' : ''}>其他</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>联系电话</label>
+        <input type="tel" id="f_tm_phone" value="${member?.phone || ''}" placeholder="手机号码">
+      </div>
+      <div class="form-group full-width">
+        <label>邮箱</label>
+        <input type="email" id="f_tm_email" value="${member?.email || ''}" placeholder="email@example.com">
+      </div>
+      <div class="form-group full-width">
+        <label>备注</label>
+        <textarea id="f_tm_remark" rows="2" placeholder="其他说明...">${member?.remark || ''}</textarea>
+      </div>
+    </div>
+  `, async () => {
+    const name = $1('f_tm_name').value.trim();
+    if (!name) { showToast('请填写姓名', 'error'); return; }
+    
+    const memberData = {
+      id: member?.id || 'tm_' + Date.now(),
+      name,
+      projectId: $1('f_tm_project').value,
+      role: $1('f_tm_role').value,
+      phone: $1('f_tm_phone').value.trim(),
+      email: $1('f_tm_email').value.trim(),
+      remark: $1('f_tm_remark').value.trim(),
+      createdAt: member?.createdAt || new Date().toISOString()
+    };
+    
+    if (member) {
+      const idx = (_data.projectTeams || []).findIndex(t => t.id === member.id);
+      if (idx >= 0) _data.projectTeams[idx] = memberData;
+    } else {
+      _data.projectTeams = _data.projectTeams || [];
+      _data.projectTeams.push(memberData);
+    }
+    
+    await saveAll();
+    renderProjectTeams();
+    showToast(member ? '成员已更新' : '成员已添加', 'success');
+  });
+}
+
+async function delTeamMember(id) {
+  if (!confirm('确认删除该团队成员？')) return;
+  _data.projectTeams = (_data.projectTeams || []).filter(t => t.id !== id);
+  await saveAll();
+  renderProjectTeams();
+  showToast('已删除', 'success');
+}
+
+function loadSavedProjectId() {
+  const saved = sessionStorage.getItem('cwm_project_id');
+  if (saved && (_data.projects || []).find(p => p.id === saved)) {
+    currentProjectId = saved;
+  } else if (_data.projects && _data.projects.length > 0) {
+    currentProjectId = _data.projects[0].id;
+  }
+}
+
+// 初始化时调用默认项目初始化
+const
