@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>幕墙工程管理系统 v3.0 云端版</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="幕墙系统">
+  <meta name="theme-color" content="#1a1a2e">
+  <meta name="description" content="幕墙工程项目管理系统">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='80' fill='%231a1a2e'/><rect x='80' y='120' width='352' height='280' rx='12' fill='%232c3e50' stroke='%23e94560' stroke-width='12'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+</script>
+
+  <!-- ============ 登录页 ============ -->
+  <div class="login-screen" id="loginScreen">
+    <div class="login-bg"></div>
+    <div class="login-card">
+      <div class="login-logo">
+        <svg viewBox="0 0 48 48" fill="none">
+          <rect x="2" y="2" width="20" height="20" rx="3" fill="var(--accent)"/>
+          <rect x="26" y="2" width="20" height="20" rx="3" fill="var(--accent)" opacity="0.6"/>
+          <rect x="2" y="26" width="20" height="20" rx="3" fill="var(--accent)" opacity="0.6"/>
+          <rect x="26" y="26" width="20" height="20" rx="3" fill="var(--accent)" opacity="0.3"/>
+        </svg>
+      </div>
+      <h1 class="login-title">幕墙工程管理系统</h1>
+      <p class="login-subtitle">Curtain Wall Management System v2.0</p>
+
+      <div class="login-form">
+        <div class="form-group">
+          <label>选择角色</label>
+          <div class="role-selector" id="roleSelectorList">
+            <div class="role-option active" data-role="manager" onclick="selectRole(this)">
+              <div class="role-icon">👔</div>
+              <div class="role-info">
+                <div class="role-name">项目经理</div>
+                <div class="role-desc">总控权限 · 所有模块</div>
+              </div>
+              <div class="role-check">✓</div>
+            </div>
+            <div class="role-option" data-role="material" onclick="selectRole(this)">
+              <div class="role-icon">📦</div>
+              <div class="role-info">
+                <div class="role-name">材料员</div>
+                <div class="role-desc">材料进场 · 库存 · 领用</div>
+              </div>
+              <div class="role-check">✓</div>
+            </div>
+            <div class="role-option" data-role="foreman" onclick="selectRole(this)">
+              <div class="role-icon">👷</div>
+              <div class="role-info">
+                <div class="role-name">班组长</div>
+                <div class="role-desc">工人档案 · 考勤 · 薪资</div>
+              </div>
+              <div class="role-check">✓</div>
+            </div>
+          </div>
+        </div>
+        <input type="hidden" id="loginRole" value="manager">
+        <div class="form-group">
+          <label>用户名</label>
+          <input type="text" id="loginUsername" placeholder="输入用户名" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label>密码</label>
+          <input type="password" id="loginPassword" placeholder="输入密码" autocomplete="current-password">
+        </div>
+        <button class="btn btn-primary login-btn" id="loginBtn">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd"/></svg>
+          登录系统
+        </button>
+      </div>
+      <div class="login-hint">预置账号：admin/admin123 · clz/clz123 · bz/bz123</div>
+    </div>
+  </div>
+
+  <!-- ============ 主系统 ============ -->
+  <div class="app-shell hidden" id="mainApp">
+    <!-- 顶部栏 -->
+    <header class="top-header" id="topHeader"></header>
+
+    <!-- 侧边栏 -->
+    <nav class="sidebar" id="sidebar"></nav>
+
+    <!-- 内容区 -->
+    <main class="content-area">
+      <div id="section_dashboard" class="content-section active"></div>
+      <div id="section_material_in" class="content-section"></div>
+      <div id="section_inventory" class="content-section"></div>
+      <div id="section_requisition" class="content-section"></div>
+      <div id="section_material_return" class="content-section"></div>
+      <div id="section_supplier" class="content-section"></div>
+      <div id="section_team" class="content-section"></div>
+      <div id="section_workers" class="content-section"></div>
+      <div id="section_attendance" class="content-section"></div>
+      <div id="section_salary" class="content-section"></div>
+      <div id="section_safety" class="content-section"></div>
+      <div id="section_contract" class="content-section"></div>
+      <div id="section_income" class="content-section"></div>
+      <div id="section_expense" class="content-section"></div>
+      <div id="section_cashflow" class="content-section"></div>
+      <div id="section_report" class="content-section"></div>
+      <div id="section_users" class="content-section"></div>
+      <div id="section_settings" class="content-section"></div>
+    </main>
+  </div>
+
+  <!-- ============ 统一模态框 ============ -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">标题</h3>
+        <button class="modal-close" onclick="closeModal()">×</button>
+      </div>
+      <div class="modal-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="modalCancel">取消</button>
+        <button class="btn btn-primary" id="modalOk">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Toast 通知 ============ -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Supabase SDK（国内可访问） -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <!-- 项目配置 -->
+  <script src="supabase-config.js"></script>
+  <!-- 核心业务逻辑 -->
+  <script src="app.js"></script>
+  <!-- 登录按钮备用绑定（确保一定绑定成功） -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      setTimeout(function() {
+        var btn = document.getElementById('loginBtn');
+        var userInput = document.getElementById('loginUsername');
+        var passInput = document.getElementById('loginPassword');
+        if (btn) {
+          btn.onclick = function() {
+            var username = userInput ? userInput.value.trim() : '';
+            var password = passInput ? passInput.value.trim() : '';
+            if (!username || !password) {
+              alert('请输入用户名和密码');
+              return;
+            }
+            if (typeof doLogin === 'function') {
+              doLogin();
+            } else {
+              // 直接执行登录逻辑
+              var user = null;
+              if (typeof _data !== 'undefined' && _data.users) {
+                user = _data.users.find(function(u) { return u.username === username && u.password === password; });
+              }
+              if (!user) {
+                alert('用户名或密码错误');
+                return;
+              }
+              if (user.status !== 'active') {
+                alert('账号已被禁用');
+                return;
+              }
+              if (typeof currentUser !== 'undefined') currentUser = user;
+              if (typeof currentRole !== 'undefined') currentRole = user.role;
+              sessionStorage.setItem('cwm_uid', user.id);
+              sessionStorage.setItem('cwm_user', JSON.stringify(user));
+              var loginScreen = document.getElementById('loginScreen');
+              var mainApp = document.getElementById('mainApp');
+              if (loginScreen) loginScreen.classList.add('hidden');
+              if (mainApp) mainApp.classList.remove('hidden');
+              alert('欢迎回来，' + user.name + '！');
+              location.reload();
+            }
+          };
+          console.log('✅ 登录按钮已绑定（备用方式）');
+        } else {
+          console.log('⚠️ 登录按钮未找到');
+        }
+      }, 500); // 延迟500ms确保DOM完全加载
+    });
+  </script>
+</body>
+</html>
