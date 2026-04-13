@@ -116,13 +116,23 @@ async function loadAllData() {
 }
 
 function initDefaultUsers() {
+  // 强制确保默认用户存在
+  const defaultUsers = [
+    { id: 'u1', username: 'admin', password: 'admin123', role: 'manager', name: '系统管理员', avatar: '👔', status: 'active' },
+    { id: 'u2', username: 'clz', password: 'clz123', role: 'material', name: '材料员小李', avatar: '📦', status: 'active' },
+    { id: 'u3', username: 'bz', password: 'bz123', role: 'foreman', name: '班组长老张', avatar: '👷', status: 'active' }
+  ];
+  
   if (!_data.users || _data.users.length === 0) {
-    _data.users = [
-      { id: 'u1', username: 'admin', password: 'admin123', role: 'manager', name: '系统管理员', avatar: '👔', status: 'active' },
-      { id: 'u2', username: 'clz', password: 'clz123', role: 'material', name: '材料员小李', avatar: '📦', status: 'active' },
-      { id: 'u3', username: 'bz', password: 'bz123', role: 'foreman', name: '班组长老张', avatar: '👷', status: 'active' }
-    ];
+    _data.users = defaultUsers;
     saveAll();
+  } else {
+    // 确保 admin 用户存在，如果不存在则添加
+    const hasAdmin = _data.users.some(u => u.username === 'admin');
+    if (!hasAdmin) {
+      _data.users.push(...defaultUsers);
+      saveAll();
+    }
   }
 // 初始化审批流程模板
   initDefaultApprovalFlows();
