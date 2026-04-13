@@ -1532,3 +1532,334 @@ body {
   .dashboard-grid { grid-template-columns: 1fr; }
   .section-summary { grid-template-columns: 1fr 1fr; }
 }
+
+/* ===== 审批流程样式 ===== */
+.approval-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.approval-stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.approval-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.approval-stat-card.warning {
+  border-color: var(--warning);
+  background: var(--warning-dim);
+}
+
+.approval-stat-card.success {
+  border-color: var(--success);
+  background: var(--success-dim);
+}
+
+.approval-stat-card .stat-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.approval-stat-card .stat-num {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.approval-stat-card.warning .stat-num {
+  color: var(--warning);
+}
+
+.approval-stat-card.success .stat-num {
+  color: var(--success);
+}
+
+.approval-stat-card .stat-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.approval-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.approval-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.approval-tab {
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.approval-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.approval-tab.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.approval-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.approval-card:hover {
+  border-color: var(--accent);
+  transform: translateX(4px);
+}
+
+.approval-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.approval-type {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.approval-status {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.approval-card-body {}
+
+.approval-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.approval-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+.approval-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.approval-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.btn-success {
+  background: var(--success);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-success:hover {
+  filter: brightness(1.1);
+}
+
+.btn-warning {
+  background: var(--warning);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-warning:hover {
+  filter: brightness(1.1);
+}
+
+/* 审批详情 */
+.approval-detail {
+  padding: 4px;
+}
+
+.approval-detail .detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.approval-detail .detail-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.approval-detail .detail-row {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.approval-detail .detail-row.full {
+  grid-template-columns: 1fr;
+}
+
+.approval-detail .detail-row label {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.approval-detail .detail-row > div {
+  color: var(--text-primary);
+}
+
+/* ===== 手机端适配 ===== */
+
+/* 手机端底部导航 */
+.mobile-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  z-index: 300;
+  padding: 8px 0;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+}
+
+.mobile-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.mobile-nav-item:active,
+.mobile-nav-item.active {
+  color: var(--accent);
+}
+
+.mobile-nav-item .nav-icon {
+  font-size: 20px;
+}
+
+.mobile-nav-items {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+/* 触摸友好的按钮 */
+@media (max-width: 768px) {
+  .mobile-bottom-nav {
+    display: block;
+  }
+  
+  .content-area {
+    padding-bottom: 80px;
+  }
+  
+  .approval-stats {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  
+  .approval-stat-card {
+    padding: 12px 8px;
+  }
+  
+  .approval-stat-card .stat-num {
+    font-size: 20px;
+  }
+  
+  .approval-meta {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .modal {
+    max-width: 95%;
+    max-height: 90vh;
+  }
+  
+  .approval-detail .detail-row {
+    grid-template-columns: 80px 1fr;
+  }
+}
+
+/* 超小屏幕适配 */
+@media (max-width: 400px) {
+  .approval-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+  
+  .approval-tabs {
+    overflow-x: auto;
+    gap: 4px;
+  }
+  
+  .approval-tab {
+    padding: 6px 12px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+}

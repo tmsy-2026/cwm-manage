@@ -89,6 +89,9 @@ async function loadAllData() {
         if (cloud.incomes) _data.incomes = cloud.incomes;
         if (cloud.expenses) _data.expenses = cloud.expenses;
         if (cloud.users) _data.users = cloud.users;
+        // 审批流程数据
+        if (cloud.approvals) _data.approvals = cloud.approvals;
+        if (cloud.approvalFlows) _data.approvalFlows = cloud.approvalFlows;
       }
     } catch (e) {
       clearTimeout(timeoutId);
@@ -115,6 +118,8 @@ function initDefaultUsers() {
     ];
     saveAll();
   }
+  // 初始化审批流程模板
+  initDefaultApprovalFlows();
 }
 
 async function saveAll() {
@@ -135,7 +140,9 @@ async function saveAll() {
       incomes: _data.incomes || [],
       expenses: _data.expenses || [],
       users: _data.users || [],
-      projectSettings: _data.projectSettings || {}
+      projectSettings: _data.projectSettings || {},
+      approvals: _data.approvals || [],
+      approvalFlows: _data.approvalFlows || []
     };
 
     const { error } = await window.supabase
@@ -175,13 +182,15 @@ const db2 = {
   get expenses()       { return _data.expenses || []; },
   get projectSettings(){ return _data.projectSettings || {}; },
   get users()          { return _data.users || []; },
+  get approvals()      { return _data.approvals || []; },
+  get approvalFlows()   { return _data.approvalFlows || []; },
 };
 
 // ==================== 权限配置 ====================
 const PERMISSIONS = {
-  manager:  { label: '项目经理', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', icon: '👔', modules: ['dashboard','material','labor','finance','users','settings'] },
-  material: { label: '材料员',   color: '#3b82f6', bg: 'rgba(59,130,246,0.15)', icon: '📦', modules: ['dashboard','material'] },
-  foreman:  { label: '班组长',   color: '#10b981', bg: 'rgba(16,185,129,0.15)', icon: '👷', modules: ['dashboard','labor'] },
+  manager:  { label: '项目经理', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', icon: '👔', modules: ['dashboard','material','labor','finance','users','settings','approval'] },
+  material: { label: '材料员',   color: '#3b82f6', bg: 'rgba(59,130,246,0.15)', icon: '📦', modules: ['dashboard','material','approval'] },
+  foreman:  { label: '班组长',   color: '#10b981', bg: 'rgba(16,185,129,0.15)', icon: '👷', modules: ['dashboard','labor','approval'] },
 };
 
 // ==================== 登录系统（Supabase Auth） ====================
@@ -290,7 +299,8 @@ function showSection(sectionId) {
     material_in:'material',inventory:'material',requisition:'material',material_return:'material',supplier:'material',
     team:'labor',workers:'labor',attendance:'labor',salary:'labor',safety:'labor',
     contract:'finance',income:'finance',expense:'finance',cashflow:'finance',report:'finance',
-    dashboard:'dashboard',users:'users',settings:'settings'
+    dashboard:'dashboard',users:'users',settings:'settings',approval:'approval',
+    approval_my:'approval',approval_pending:'approval',approval_all:'approval'
   };
   const mod = sectionModuleMap[sectionId];
   if (mod && !hasModuleAccess(mod)) { showToast('您没有访问该模块的权限', 'error'); return; }
@@ -299,6 +309,9 @@ function showSection(sectionId) {
   document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
   const sec = $1('section_' + sectionId);
   if (sec) sec.classList.add('active');
+  
+  // 更新底部导航状态
+  updateMobileNavState(sectionId);
 
   switch (sectionId) {
     case 'dashboard':        renderDashboard(); break;
@@ -326,6 +339,7 @@ function renderSidebar() {
   const sidebar = $1('sidebar');
   const allMenus = [
     { id:'dashboard', icon:'📊', label:'项目看板', module:'dashboard' },
+    { id:'approval',  icon:'📝', label:'审批流程', module:'approval' },
     { id:'material',  icon:'📦', label:'材料管理', module:'material', children:[
       { id:'material_in',      icon:'🚚', label:'材料进场' },
       { id:'inventory',         icon:'🗄️', label:'库存台账' },
@@ -1240,8 +1254,365 @@ function clearDemoData() {
   saveAll().then(()=>location.reload());
 }
 
-// ==================== 初始化 ====================
-// 初始化标志
+// ==================== 审批流程系统 ====================
+
+// 审批类型配置
+const APPROVAL_TYPES = {
+  purchase: { label: '采购申请', icon: '🛒', color: '#3b82f6' },
+  payment: { label: '付款申请', icon: '💰', color: '#f59e0b' },
+  leave: { label: '请假申请', icon: '🏖️', color: '#10b981' },
+  overtime: { label: '加班申请', icon: '⏰', color: '#8b5cf6' },
+  material: { label: '领料申请', icon: '📦', color: '#06b6d4' },
+  contract: { label: '合同审批', icon: '📄', color: '#ef4444' },
+  general: { label: '通用审批', icon: '📋', color: '#6b7280' }
+};
+
+// 审批状态
+const APPROVAL_STATUS = {
+  draft: { label: '草稿', color: '#6b7280', bg: 'rgba(107,114,128,0.15)' },
+  pending: { label: '待审批', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' },
+  approved: { label: '已通过', color: '#10b981', bg: 'rgba(16,185,129,0.15)' },
+  rejected: { label: '已驳回', color: '#ef4444', bg: 'rgba(239,68,68,0.15)' },
+  revoked: { label: '已撤回', color: '#6b7280', bg: 'rgba(107,114,128,0.15)' }
+};
+
+// 渲染审批模块主页
+function renderApproval() {
+  const myApprovals = (_data.approvals || []).filter(a => a.applicantId === currentUser?.id);
+  const pendingApprovals = (_data.approvals || []).filter(a => a.status === 'pending' && a.approverId === currentUser?.id);
+  const allApprovals = _data.approvals || [];
+  
+  // 统计
+  const stats = {
+    myTotal: myApprovals.length,
+    myPending: myApprovals.filter(a => a.status === 'pending').length,
+    toApprove: pendingApprovals.length,
+    approved: allApprovals.filter(a => a.status === 'approved').length
+  };
+  
+  showSectionContent('approval', `
+    <div class="approval-stats">
+      <div class="approval-stat-card" onclick="showApprovalTab('my')">
+        <div class="stat-icon">📝</div>
+        <div class="stat-num">${stats.myTotal}</div>
+        <div class="stat-label">我的申请</div>
+      </div>
+      <div class="approval-stat-card warning" onclick="showApprovalTab('pending')">
+        <div class="stat-icon">⏳</div>
+        <div class="stat-num">${stats.toApprove}</div>
+        <div class="stat-label">待我审批</div>
+      </div>
+      <div class="approval-stat-card success" onclick="showApprovalTab('approved')">
+        <div class="stat-icon">✅</div>
+        <div class="stat-num">${stats.approved}</div>
+        <div class="stat-label">已通过</div>
+      </div>
+    </div>
+    
+    <div class="approval-actions">
+      <button class="btn btn-primary" onclick="openApprovalForm()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 5v14M5 12h14"/></svg>
+        新建申请
+      </button>
+    </div>
+    
+    <div class="approval-tabs">
+      <button class="approval-tab active" data-tab="my" onclick="showApprovalTab('my')">我的申请</button>
+      <button class="approval-tab" data-tab="pending" onclick="showApprovalTab('pending')">待我审批</button>
+      <button class="approval-tab" data-tab="all" onclick="showApprovalTab('all')">全部记录</button>
+    </div>
+    
+    <div id="approvalListContainer"></div>
+  `);
+  
+  showApprovalTab('my');
+}
+
+// 显示审批列表
+function showApprovalTab(tab) {
+  // 更新tab状态
+  document.querySelectorAll('.approval-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
+  
+  let approvals = [];
+  switch(tab) {
+    case 'my':
+      approvals = (_data.approvals || []).filter(a => a.applicantId === currentUser?.id);
+      break;
+    case 'pending':
+      approvals = (_data.approvals || []).filter(a => a.status === 'pending' && a.approverId === currentUser?.id);
+      break;
+    case 'all':
+      approvals = _data.approvals || [];
+      break;
+  }
+  
+  // 按时间倒序
+  approvals.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  
+  const container = document.getElementById('approvalListContainer');
+  if (!approvals.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div>暂无审批记录</div></div>';
+    return;
+  }
+  
+  container.innerHTML = approvals.map(a => {
+    const type = APPROVAL_TYPES[a.type] || APPROVAL_TYPES.general;
+    const status = APPROVAL_STATUS[a.status] || APPROVAL_STATUS.draft;
+    const isPendingApproval = a.status === 'pending' && a.approverId === currentUser?.id;
+    
+    return `
+      <div class="approval-card" onclick="viewApprovalDetail('${a.id}')">
+        <div class="approval-card-header">
+          <span class="approval-type" style="background:${type.bg};color:${type.color}">
+            ${type.icon} ${type.label}
+          </span>
+          <span class="approval-status" style="background:${status.bg};color:${status.color}">
+            ${status.label}
+          </span>
+        </div>
+        <div class="approval-card-body">
+          <div class="approval-title">${a.title || '未填写标题'}</div>
+          <div class="approval-desc">${a.description || ''}</div>
+          <div class="approval-meta">
+            <span>💰 ${formatMoney(a.amount || 0)}</span>
+            <span>👤 ${a.applicantName || ''}</span>
+            <span>📅 ${formatDate(a.createdAt)}</span>
+          </div>
+        </div>
+        ${isPendingApproval ? `
+          <div class="approval-card-actions">
+            <button class="btn btn-sm btn-success" onclick="event.stopPropagation();approveItem('${a.id}')">✅ 通过</button>
+            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();rejectItem('${a.id}')">❌ 驳回</button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+// 打开新建申请表单
+function openApprovalForm() {
+  const typeOptions = Object.entries(APPROVAL_TYPES).map(([k, v]) => 
+    `<option value="${k}">${v.icon} ${v.label}</option>`
+  ).join('');
+  
+  const approverOptions = (_data.users || [])
+    .filter(u => u.role === 'manager' && u.id !== currentUser?.id)
+    .map(u => `<option value="${u.id}">${u.avatar} ${u.name}</option>`)
+    .join('') || '<option value="admin">👔 系统管理员</option>';
+  
+  showModal('新建审批申请', `
+    <div class="form-grid">
+      <div class="form-group">
+        <label>申请类型 *</label>
+        <select id="f_approval_type" onchange="updateApprovalAmountLabel()">
+          ${typeOptions}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>审批人 *</label>
+        <select id="f_approval_approver">
+          ${approverOptions}
+        </select>
+      </div>
+      <div class="form-group full-width">
+        <label>申请标题 *</label>
+        <input type="text" id="f_approval_title" placeholder="简要说明申请内容">
+      </div>
+      <div class="form-group full-width">
+        <label id="approval_amount_label">申请金额</label>
+        <input type="number" id="f_approval_amount" min="0" placeholder="0.00">
+      </div>
+      <div class="form-group full-width">
+        <label>详细说明</label>
+        <textarea id="f_approval_desc" rows="4" placeholder="请详细描述申请原因..."></textarea>
+      </div>
+    </div>
+  `, async () => {
+    const type = $1('f_approval_type').value;
+    const title = $1('f_approval_title').value.trim();
+    const amount = parseFloat($1('f_approval_amount').value) || 0;
+    const description = $1('f_approval_desc').value.trim();
+    const approverId = $1('f_approval_approver').value;
+    
+    if (!title) {
+      showToast('请填写申请标题', 'error');
+      return;
+    }
+    
+    const approver = (_data.users || []).find(u => u.id === approverId);
+    
+    const approval = {
+      id: genId(),
+      type,
+      title,
+      amount,
+      description,
+      status: 'pending',
+      applicantId: currentUser?.id,
+      applicantName: currentUser?.name,
+      approverId: approverId,
+      approverName: approver?.name || '系统管理员',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    _data.approvals = _data.approvals || [];
+    _data.approvals.push(approval);
+    await saveAll();
+    
+    renderApproval();
+    showToast('申请已提交，等待审批', 'success');
+  });
+}
+
+// 更新金额标签
+function updateApprovalAmountLabel() {
+  const type = $1('f_approval_type')?.value;
+  const label = document.getElementById('approval_amount_label');
+  if (label) {
+    if (type === 'leave' || type === 'overtime') {
+      label.textContent = '时长/天数';
+    } else if (type === 'general') {
+      label.textContent = '预估费用';
+    } else {
+      label.textContent = '申请金额 (元)';
+    }
+  }
+}
+
+// 查看审批详情
+function viewApprovalDetail(id) {
+  const approval = (_data.approvals || []).find(a => a.id === id);
+  if (!approval) return;
+  
+  const type = APPROVAL_TYPES[approval.type] || APPROVAL_TYPES.general;
+  const status = APPROVAL_STATUS[approval.status] || APPROVAL_STATUS.draft;
+  
+  showModal(`审批详情 - ${type.label}`, `
+    <div class="approval-detail">
+      <div class="detail-header">
+        <span class="approval-type" style="background:${type.bg};color:${type.color}">
+          ${type.icon} ${type.label}
+        </span>
+        <span class="approval-status" style="background:${status.bg};color:${status.color}">
+          ${status.label}
+        </span>
+      </div>
+      
+      <div class="detail-info">
+        <div class="detail-row">
+          <label>申请标题</label>
+          <div>${approval.title}</div>
+        </div>
+        <div class="detail-row">
+          <label>申请金额</label>
+          <div class="money-cell">${formatMoney(approval.amount || 0)}</div>
+        </div>
+        <div class="detail-row">
+          <label>申请人</label>
+          <div>${approval.applicantName}</div>
+        </div>
+        <div class="detail-row">
+          <label>审批人</label>
+          <div>${approval.approverName}</div>
+        </div>
+        <div class="detail-row">
+          <label>申请时间</label>
+          <div>${formatDate(approval.createdAt)}</div>
+        </div>
+        ${approval.approverComment ? `
+          <div class="detail-row">
+            <label>审批意见</label>
+            <div>${approval.approverComment}</div>
+          </div>
+        ` : ''}
+        <div class="detail-row full">
+          <label>详细说明</label>
+          <div>${approval.description || '无'}</div>
+        </div>
+      </div>
+    </div>
+  `, () => closeModal());
+}
+
+// 审批通过
+async function approveItem(id) {
+  showModal('审批意见', `
+    <div class="form-group full-width">
+      <label>通过意见（可选）</label>
+      <textarea id="f_approval_comment" rows="3" placeholder="填写审批意见..."></textarea>
+    </div>
+  `, async () => {
+    const comment = $1('f_approval_comment')?.value?.trim() || '同意';
+    const idx = (_data.approvals || []).findIndex(a => a.id === id);
+    if (idx >= 0) {
+      _data.approvals[idx].status = 'approved';
+      _data.approvals[idx].approverComment = comment;
+      _data.approvals[idx].updatedAt = new Date().toISOString();
+      await saveAll();
+      renderApproval();
+      showToast('已审批通过', 'success');
+    }
+  });
+}
+
+// 审批驳回
+async function rejectItem(id) {
+  showModal('驳回原因', `
+    <div class="form-group full-width">
+      <label>驳回原因 *</label>
+      <textarea id="f_reject_reason" rows="3" placeholder="请填写驳回原因..."></textarea>
+    </div>
+  `, async () => {
+    const reason = $1('f_reject_reason')?.value?.trim();
+    if (!reason) {
+      showToast('请填写驳回原因', 'error');
+      return;
+    }
+    const idx = (_data.approvals || []).findIndex(a => a.id === id);
+    if (idx >= 0) {
+      _data.approvals[idx].status = 'rejected';
+      _data.approvals[idx].approverComment = reason;
+      _data.approvals[idx].updatedAt = new Date().toISOString();
+      await saveAll();
+      renderApproval();
+      showToast('已驳回申请', 'warning');
+    }
+  });
+}
+
+// 初始化审批流程模板
+function initDefaultApprovalFlows() {
+  if (!_data.approvalFlows || _data.approvalFlows.length === 0) {
+    _data.approvalFlows = [
+      { id: 'flow_1', name: '常规审批流', type: 'general', steps: [{order: 1, approverRole: 'manager'}] },
+      { id: 'flow_2', name: '采购审批流', type: 'purchase', steps: [{order: 1, approverRole: 'manager'}] },
+      { id: 'flow_3', name: '付款审批流', type: 'payment', steps: [{order: 1, approverRole: 'manager'}] }
+    ];
+  }
+}
+
+// 更新手机端底部导航状态
+function updateMobileNavState(sectionId) {
+  const sectionModuleMap = {
+    material_in:'material',inventory:'material',requisition:'material',material_return:'material',supplier:'material',
+    team:'labor',workers:'labor',attendance:'labor',salary:'labor',safety:'labor',
+    dashboard:'dashboard',approval:'approval'
+  };
+  
+  const module = sectionModuleMap[sectionId] || sectionId;
+  
+  document.querySelectorAll('.mobile-nav-item').forEach(item => {
+    item.classList.remove('active');
+    if (item.dataset.section === module) {
+      item.classList.add('active');
+    }
+  });
+}
+
+
 let _initialized = false;
 
 document.addEventListener('DOMContentLoaded', async function() {

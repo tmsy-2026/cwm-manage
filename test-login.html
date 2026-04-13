@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>登录测试</title>
+  <style>
+    body { font-family: sans-serif; padding: 40px; background: #1a1a2e; color: white; }
+    .box { background: #16213e; padding: 20px; border-radius: 10px; margin: 10px 0; }
+    .success { color: #4ade80; }
+    .error { color: #f87171; }
+    .warn { color: #fbbf24; }
+    input { padding: 10px; border-radius: 5px; border: 1px solid #333; background: #0f3460; color: white; width: 200px; }
+    button { padding: 10px 20px; border-radius: 5px; border: none; background: #3b82f6; color: white; cursor: pointer; margin-left: 10px; }
+    button:hover { background: #2563eb; }
+  </style>
+</head>
+<body>
+  <h1>🔐 登录测试页面</h1>
+  
+  <div id="debug" class="box"></div>
+  
+  <div class="box">
+    <h3>配置信息</h3>
+    <p>SUPABASE_URL: <span id="cfgUrl"></span></p>
+    <p>SUPABASE_ANON_KEY: <span id="cfgKey"></span></p>
+  </div>
+  
+  <div class="box">
+    <h3>登录测试</h3>
+    <input type="text" id="username" placeholder="用户名" value="admin">
+    <input type="password" id="password" placeholder="密码" value="admin123">
+    <button onclick="testLogin()">登录</button>
+  </div>
+  
+  <div id="result" class="box" style="display:none"></div>
+
+  <!-- Supabase SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  
+  <!-- 配置 -->
+  <script src="supabase-config.js"></script>
+  
+  <script>
+    const debug = document.getElementById('debug');
+    const cfgUrl = document.getElementById('cfgUrl');
+    const cfgKey = document.getElementById('cfgKey');
+    const result = document.getElementById('result');
+    
+    function log(msg, type = 'info') {
+      const colors = { info: '#60a5fa', success: '#4ade80', error: '#f87171', warn: '#fbbf24' };
+      debug.innerHTML += `<p style="color:${colors[type]||colors.info}">${msg}</p>`;
+      console.log(msg);
+    }
+    
+    function init() {
+      log('=== 诊断开始 ===');
+      
+      // 1. 检查配置
+      log('SUPABASE_URL defined: ' + (typeof SUPABASE_URL !== 'undefined'));
+      log('SUPABASE_ANON_KEY defined: ' + (typeof SUPABASE_ANON_KEY !== 'undefined'));
+      
+      cfgUrl.textContent = typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '❌ 未定义';
+      cfgKey.textContent = typeof SUPABASE_ANON_KEY !== 'undefined' ? SUPABASE_ANON_KEY.substring(0, 30) + '...' : '❌ 未定义';
+      
+      // 2. 检查 SDK
+      log('supabase SDK loaded: ' + (typeof supabase !== 'undefined'));
+      log('supabase.createClient function: ' + (typeof supabase !== 'undefined' && typeof supabase.createClient === 'function'));
+      
+      if (typeof supabase === 'undefined') {
+        log('❌ Supabase SDK 未加载！请检查网络连接', 'error');
+        return;
+      }
+      
+      if (typeof SUPABASE_URL === 'undefined') {
+        log('❌ 配置文件未加载！', 'error');
+        return;
+      }
+      
+      // 3. 初始化客户端
+      try {
+        const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        log('✅ Supabase 客户端创建成功', 'success');
+        
+        // 4. 测试连接
+        testConnection(client);
+      } catch (e) {
+        log('❌ Supabase 初始化失败: ' + e.message, 'error');
+      }
+    }
+    
+    async function testConnection(client) {
+      log('正在测试数据库连接...', 'warn');
+      
+      try {
+        const { data, error } = await client.from('app_data').select('*').limit(1);
+        
+        if (error) {
+          if (error.message.includes('does not exist')) {
+            log('⚠️ 表不存在，请先在 Supabase 后台执行 SQL', 'warn');
+          } else {
+            log('⚠️ 查询错误: ' + error.message, 'warn');
+          }
+        } else {
+          log('✅ 数据库连接成功！数据: ' + JSON.stringify(data), 'success');
+        }
+      } catch (e) {
+        log('❌ 连接测试失败: ' + e.message, 'error');
+      }
+    }
+    
+    function testLogin() {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      
+      result.style.display = 'block';
+      
+      // 模拟登录逻辑
+      if (username === 'admin' && password === 'admin123') {
+        result.innerHTML = '<span class="success">✅ 登录成功！用户名: ' + username + '</span>';
+      } else {
+        result.innerHTML = '<span class="error">❌ 登录失败！用户名或密码错误</span>';
+      }
+    }
+    
+    init();
+  </script>
+</body>
+</html>

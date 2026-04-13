@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supabase 连接测试</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a2e; color: white; }
+    .box { background: #16213e; padding: 20px; border-radius: 10px; margin: 10px 0; }
+    .success { color: #4ade80; }
+    .error { color: #f87171; }
+    .info { color: #60a5fa; }
+  </style>
+</head>
+<body>
+  <h1>🔧 Supabase 连接诊断</h1>
+  
+  <div id="result" class="box">正在检测...</div>
+  
+  <div class="box">
+    <h3>配置信息</h3>
+    <p>URL: <span id="url"></span></p>
+    <p>Key: <span id="key"></span></p>
+  </div>
+  
+  <div class="box">
+    <h3>调试信息</h3>
+    <pre id="debug"></pre>
+  </div>
+
+  <!-- Supabase SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  
+  <!-- 配置 -->
+  <script src="supabase-config.js"></script>
+  
+  <script>
+    const result = document.getElementById('result');
+    const debug = document.getElementById('debug');
+    const urlSpan = document.getElementById('url');
+    const keySpan = document.getElementById('key');
+    
+    urlSpan.textContent = typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '❌ 未定义';
+    keySpan.textContent = typeof SUPABASE_ANON_KEY !== 'undefined' ? SUPABASE_ANON_KEY.substring(0, 20) + '...' : '❌ 未定义';
+    
+    debug.textContent = `
+SUPABASE_URL defined: ${typeof SUPABASE_URL !== 'undefined'}
+SUPABASE_ANON_KEY defined: ${typeof SUPABASE_ANON_KEY !== 'undefined'}
+supabase object: ${typeof supabase !== 'undefined'}
+supabase.createClient: ${typeof supabase !== 'undefined' && typeof supabase.createClient === 'function'}
+    `.trim();
+    
+    async function test() {
+      if (typeof SUPABASE_URL === 'undefined' || typeof SUPABASE_ANON_KEY === 'undefined') {
+        result.innerHTML = '<span class="error">❌ 配置文件未加载！</span>';
+        return;
+      }
+      
+      if (typeof supabase === 'undefined') {
+        result.innerHTML = '<span class="error">❌ Supabase SDK 未加载！</span>';
+        return;
+      }
+      
+      result.innerHTML = '<span class="info">⏳ 正在连接 Supabase...</span>';
+      
+      try {
+        const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const { data, error } = await client.from('app_data').select('*').limit(1);
+        
+        if (error) {
+          result.innerHTML = `
+            <span class="success">✅ Supabase 连接成功！</span><br><br>
+            <span class="info">表查询结果：</span><br>
+            ${error.message === 'relation "public.app_data" does not exist' 
+              ? '⚠️ 表不存在，请先在 Supabase 后台执行 SQL 创建表' 
+              : error.message}
+          `;
+        } else {
+          result.innerHTML = '<span class="success">✅ 完全正常！可以登录了！</span>';
+        }
+      } catch (e) {
+        result.innerHTML = `<span class="error">❌ 连接失败：${e.message}</span>`;
+      }
+    }
+    
+    test();
+  </script>
+</body>
+</html>
